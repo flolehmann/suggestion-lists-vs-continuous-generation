@@ -1,0 +1,26 @@
+input[type=radio] {
+    display: block;
+    margin: 0 auto;
+}
+.radiolabel {
+    display: inline-block;
+    margin-right: 10px;
+    margin-left: 10px;
+    margin-bottom: 25px;
+}
+
+.questionlabel {
+    display: inline-block;
+    margin-bottom: 10px;
+    font-weight: 620;
+    font-size: 18px;
+}
+
+.link {
+    font-size: 20px;
+}
+
+.divider {
+    width: auto;
+    height: 20px;
+}

@@ -1,0 +1,586 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(psych)
+library(stringr)
+library(ggplot2)
+library(lmerTest)
+library(report)
+library(coin)
+library(multcomp)
+library(multgee)
+library(plyr)
+library(dplyr)
+```
+
+```{r}
+# users taken out of analysis: user13 (had bugs on one technique), user30 (done it on laptop)
+all_users <- list(user12, user14, user15, user16, user17, user18, user19, user20, user21, user22, user23, user24, user25, user26, user27, user28, user31, user32)
+
+# The data of all users combined to one DataFrame
+data <- bind_rows(all_users)
+```
+
+```{r}
+# Add column for the real needed time (without the time used for generating)
+data <- data %>% mutate(time = needed_time - time_generating)
+
+# Add column for the length of the result (in characters)
+data <- data %>% mutate(length = nchar(result))
+ 
+# Add column for the subject (the userId)
+data <- data %>% mutate(subject = floor(taskid/10))
+
+# Add column for the words per minute
+data <- data %>% mutate(wpm = (length/5)/(time/60))
+
+head(data, 10)
+```
+
+
+```{r}
+# replace \n in result texts by whitespaces (to eliminate them from word counts)
+data <- data %>% mutate(result = gsub('\\\\n|\\\\r', " ", result))
+
+# compute and add WPM (according to related work simply divide the time by 5)
+data <- data %>% mutate(wpm = (length/5)/(time/60))
+
+# count words of text
+data <- data %>% mutate(word_count=str_count(result, "\\w+"))
+
+# compute time in minutes
+data <- data %>% mutate(time_minutes = (time/60))
+
+# compute wpm based on time and word count
+data <- data %>% mutate(wpm_time_word_count = word_count / time_minutes)
+
+# build an average from both task ratings per method and subject
+likert_means <- data %>% dplyr::select(method, subject, question0, question1, question2, question3, question4, question5) %>% group_by(subject, method) %>% summarise(question0 = mean(question0), question1 = mean(question1), question2 = mean(question2), question3 = mean(question3), question4 = mean(question4), question5 = mean(question5)) 
+
+```
+
+
+```{r}
+overview <- function(df, col, bin_width=30, filter_by_method=-1, filter_by_task=-1, filter_statement=-1) {
+  if (filter_by_method != -1) {
+    df <- df %>% filter(method == filter_by_method) 
+  }
+  
+  if (filter_by_task != -1) {
+    df <- df %>% filter(task == filter_by_task)
+  }
+  
+  if (filter_statement != -1) {
+    df <- df %>% filter(eval(rlang::parse_expr(filter_statement)))
+  }
+  
+  vals <- df %>% pull(col)
+  
+  q1 <- quantile(vals, 0.25)
+  q3 <- quantile(vals, 0.75)
+  median <- quantile(vals, 0.5)
+  mean <- mean(vals)
+  stde <- sd(vals)
+  
+  hist <- qplot(x, geom='histogram',
+                binwidth = bin_width,
+                xlab = col,
+                ylab = 'Frequency',
+                fill=I("blue"),
+                col=I("darkblue"),
+                alpha=I(.2),
+                     show.legend=TRUE) +
+          geom_vline(aes(xintercept=median,
+                         color=I("Median")),
+                     linetype="solid",
+                     size=1,
+                     show.legend=TRUE) +
+          geom_vline(aes(xintercept=q1,
+                         color=I("Q1/Q3")),
+                     linetype="solid",
+                     size=1,
+                     show.legend=TRUE) +
+    			geom_vline(aes(xintercept=q3,
+                         color=I("Q1/Q3")),
+                     linetype="solid",
+                     size=1,
+                     show.legend=TRUE) + 
+          geom_vline(aes(xintercept=mean,
+                         color=I("Mean")),
+                     linetype="solid",
+                     size=1) + 
+          scale_colour_manual("", 
+                        breaks = c("Mean", "Median", "Q1/Q3"),
+                        values = c("purple", "orange", "green"))
+  print(hist)
+  
+  #print(paste("Descriptive summary of", col))
+  #print(paste("sum:", sum(vals)))
+  #print(paste("n:", length(vals)))
+  #print(paste("Mean:", mean))
+  #print(paste("Q1:", q1))
+  #print(paste("Median:", median))
+  #print(paste("Q3:", q3))
+  #print(paste("Standard Deviation:", stde))
+  
+  #print(describe(vals))
+
+  return (vals)
+}
+```
+
+```{r}
+# overall word count statistics
+overview(data, 'word_count')
+
+# overall task completion time
+overview(data, 'time_minutes')
+overview(data, 'time_generating', filter_statement = "method == 1 | method == 2")
+
+# overall amount of generations
+# overview(data, 'amount_generations', filter_by_method=1)
+# overview(data, 'amount_generations', filter_by_method=2)
+overview(data, 'amount_generations', filter_statement = "method == 1 | method == 2")
+# overview(data, 'amount_generations')
+
+overview(data, 'amount_new_opts', filter_by_method=2)
+```
+
+```{r}
+overview(data, 'wpm', filter_by_method=0)
+overview(data, 'wpm', filter_by_method=1)
+overview(data, 'wpm', filter_by_method=2)
+ddply(data, ~ method, function(d) summary(d$wpm))
+```
+
+```{r}
+overview(data, 'time', filter_by_method=0)
+overview(data, 'time', filter_by_method=1)
+overview(data, 'time', filter_by_method=2)
+ddply(data, ~ method, function(d) summary(d$time))
+```
+```{r}
+overview(data, 'time_minutes', filter_by_method=0)
+overview(data, 'time_minutes', filter_by_method=1)
+overview(data, 'time_minutes', filter_by_method=2)
+ddply(data, ~ method, function(d) summary(d$time_minutes))
+```
+
+```{r}
+overview(data, 'word_count', filter_by_method=0)
+overview(data, 'word_count', filter_by_method=1)
+overview(data, 'word_count', filter_by_method=2)
+ddply(data, ~ method, function(d) summary(d$word_count))
+```
+
+```{r}
+overview(data, 'length', filter_by_method=0)
+overview(data, 'length', filter_by_method=1)
+overview(data, 'length', filter_by_method=2)
+ddply(data, ~ method, function(d) summary(d$length))
+```
+
+```{r}
+overview(data_counts, 'amount_actions', filter_by_method=0)
+overview(data_counts, 'amount_actions', filter_by_method=1)
+overview(data_counts, 'amount_actions', filter_by_method=2)
+ddply(data_counts, ~ method, function(d) summary(d$amount_actions))
+```
+
+```{r}
+overview(data_counts, 'amount_backs', filter_by_method=0)
+overview(data_counts, 'amount_backs', filter_by_method=1)
+overview(data_counts, 'amount_backs', filter_by_method=2)
+ddply(data_counts, ~ method, function(d) summary(d$amount_backs))
+```
+
+```{r}
+overview(data_counts, 'amount_backsequs', filter_by_method=0)
+overview(data_counts, 'amount_backsequs', filter_by_method=1)
+overview(data_counts, 'amount_backsequs', filter_by_method=2)
+ddply(data_counts, ~ method, function(d) summary(d$amount_backsequs))
+```
+```{r}
+overview(data_counts, 'avg_len_backsequs', filter_by_method=0)
+overview(data_counts, 'avg_len_backsequs', filter_by_method=1)
+overview(data_counts, 'avg_len_backsequs', filter_by_method=2)
+ddply(data_counts, ~ method, function(d) summary(d$avg_len_backsequs))
+```
+
+```{r}
+checkNormalDistribution <- function(col, vals) {
+
+  # Plot Histogramm (flo)
+  hist(vals,  main=paste("Histogram of", col, sep=" "), xlab=col, ylab="Number of Subjects (Frequency)", las=1, breaks=20)
+  
+  # Plot QQ-Plot
+  qqnorm(vals)
+  qqline(vals, col = 2)
+  
+  # Print Shapiro-Wilk Test results
+  print(shapiro.test(vals))
+  
+}
+
+# checkNormalDistribution("wpm", x)
+```
+
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data$subject <- as.factor(data$subject)
+data$task <- as.factor(data$task)
+data$method <- as.factor(data$method)
+
+model <- lmer(formula = time ~ method + (1|task) + (1|subject), data = data)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+library(multcomp)
+test = glht(model,linfct=mcp(method="Tukey")) 
+```
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data$subject <- as.factor(data$subject)
+data$task <- as.factor(data$task)
+data$method <- as.factor(data$method)
+
+model <- lmer(formula = time_minutes ~ method + (1|task) + (1|subject), data = data)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+```
+
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data$subject <- as.factor(data$subject)
+data$task <- as.factor(data$task)
+data$method <- as.factor(data$method)
+
+model <- lmer(formula = wpm ~ method + (1|task) + (1|subject), data = data)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+```
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data$subject <- as.factor(data$subject)
+data$task <- as.factor(data$task)
+data$method <- as.factor(data$method)
+
+model <- lmer(formula = length ~ method + (1|task) + (1|subject), data = data)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+library(multcomp)
+test = glht(model,linfct=mcp(method="Tukey"))
+summary(test)
+```
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data_counts$subject <- as.factor(data_counts$subject)
+data_counts$task <- as.factor(data_counts$task)
+data_counts$method <- as.factor(data_counts$method)
+
+model <- glmer(formula = avg_len_backsequs ~ method + (1|task) + (1|subject), data = data_counts, family=poisson)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+test = glht(model,linfct=mcp(method="Tukey"), test=adjusted(type="holm"))
+summary(test)
+```
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data_counts$subject <- as.factor(data_counts$subject)
+data_counts$task <- as.factor(data_counts$task)
+data_counts$method <- as.factor(data_counts$method)
+
+model <- glmer(formula = amount_backsequs ~ method + (1|task) + (1|subject), data = data_counts, family=poisson)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+test = glht(model,linfct=mcp(method="Tukey"), test=adjusted(type="holm"))
+summary(test)
+```
+
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data_counts$subject <- as.factor(data_counts$subject)
+data_counts$task <- as.factor(data_counts$task)
+data_counts$method <- as.factor(data_counts$method)
+
+model <- glmer(formula = amount_actions ~ method + (1|task) + (1|subject), data = data_counts, family=poisson)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+test = glht(model,linfct=mcp(method="Tukey"), test=adjusted(type="holm"))
+summary(test)
+```
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data_counts$subject <- as.factor(data_counts$subject)
+data_counts$task <- as.factor(data_counts$task)
+data_counts$method <- as.factor(data_counts$method)
+
+model <- glmer(formula = amount_backs ~ method + (1|task) + (1|subject), data = data_counts, family=poisson)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+test = glht(model,linfct=mcp(method="Tukey"), test=adjusted(type="holm"))
+summary(test)
+```
+
+```{r}
+# LMM with method as fixed effect, and task and subject as random effect
+
+data_counts$subject <- as.factor(data_counts$subject)
+data_counts$task <- as.factor(data_counts$task)
+data_counts$method <- as.factor(data_counts$method)
+
+model <- glmer(formula = amount_actions ~ method + (1|task) + (1|subject), data = data_counts, family=poisson)
+
+report(model)
+summary(model)
+fixef(model)
+confint(model)
+
+library(multcomp)
+test = glht(model,linfct=mcp(method="Tukey"))
+summary(test)
+```
+
+```{r}
+data$subject <- as.factor(data$subject)
+data$method <- as.factor(data$method)
+data$task <- as.factor(data$task)
+
+data_cols = list(
+  "question0",
+  "question1",
+  "question2",
+  "question3",
+  "question4",
+  "question5"
+)
+
+data$question0 <- as.ordered(data$question0)
+data$question1 <- as.ordered(data$question1)
+data$question2 <- as.ordered(data$question2)
+data$question3 <- as.ordered(data$question3)
+data$question4 <- as.ordered(data$question4)
+data$question5 <- as.ordered(data$question5)
+
+for (col in data_cols)
+{
+  
+  print(sprintf("*****************************"))
+  print(sprintf("Analyzing %s ...", col))
+  print(sprintf("*****************************"))
+  formula <- paste(col, "~ method")
+  print(sprintf("Using formula: %s", formula))
+  
+  gee <- ordLORgee(formula, id = data$subject, data = data)
+  print(summary(gee))
+  print("OI")
+  print(exp(coef(gee)))
+}
+```
+
+```{r}
+# pairwise t-test for amounts_back between method 1 and 2
+
+ttest_data = data_count
+ttest_data = ttest_data[c("method","amount_backs")]
+
+checkNormalDistribution("amount_backs", ttest_data$amount_backs)
+
+pairwise.t.test(ttest_data$amount_backs, ttest_data$method , p.adj = "bonf")
+t.test(ttest_data$amount_backs, ttest_data$method, paired=TRUE)
+
+```
+
+
+```{r}
+
+add_IQR <- function(d) {
+  d <- d %>% mutate(IQR = d$"3rd Qu." - d$"1st Qu.")
+  print(d)
+}
+
+add_IQR(ddply(likert_means, ~ method, function(d) summary(d$question0)))
+add_IQR(ddply(likert_means, ~ method, function(d) summary(d$question1)))
+add_IQR(ddply(likert_means, ~ method, function(d) summary(d$question2)))
+add_IQR(ddply(likert_means, ~ method, function(d) summary(d$question3)))
+add_IQR(ddply(likert_means, ~ method, function(d) summary(d$question4)))
+add_IQR(ddply(likert_means, ~ method, function(d) summary(d$question5)))
+
+```
+
+
+```{r}
+# friedman test and wilcoxcon signed rank for amounts_back between method 1 and 2
+likert_means$subject <- as.factor(likert_means$subject)
+likert_means$method <- as.factor(likert_means$method)
+
+data_cols = list(
+  "question0",
+  "question1",
+  "question2",
+  "question3",
+  "question4",
+  "question5"
+)
+
+comparisons = list(c(0, 1), c(0, 2), c(1, 2))
+
+for (col in data_cols)
+{
+  formula <- as.formula(paste(col, "~ factor(method) | subject"))
+  # first check if differences are significant
+  print(friedman_test(formula, data=likert_means))
+
+  # get all pairwise combinations of levels of the method factor,
+  formula <- as.formula(paste(col, "~ factor(method) | subject"))
+  # run wilcoxon signed-ranks on each pair of levels, collecting
+  # the test statistic and the p-value into a single table.
+  post_hoc_tests = ldply(comparisons, function(methods){
+      wt = wilcoxsign_test(formula,
+        data=likert_means[likert_means$method %in% methods,],
+        dist="exact")
+        data.frame(comparison = paste(methods,collapse=" - "),
+        z = statistic(wt), pvalue = pvalue(wt)
+      )
+  })
+  formula <- as.formula(paste(col, "~ factor(method)"))
+  label = paste(col, "means")
+  boxplot(formula, data = likert_means, horizontal=TRUE, ylim = c(1, 5), xaxt="n", col='steelblue', main=label)
+  axis(1, 
+     at=seq(1, 5, by=.5),
+     labels = T)
+
+  
+  post_hoc_tests$adjusted_pvalue = p.adjust(post_hoc_tests$pvalue, method="bonferroni")
+  post_hoc_tests <- post_hoc_tests %>% mutate(name = col)
+  print(post_hoc_tests)
+}
+
+```
+
+
+```{r}
+# WIP: Can be used to relate interaction measures to likert ratings, e.g. check if backspace usage affects ratings on "perceived authorship"
+
+library(multgee)
+
+data_cols = list(
+  "question0",
+  "question1",
+  "question2",
+  "question3",
+  "question4",
+  "question5"
+)
+
+for (col in data_cols)
+{
+  # recode in reverse so that the predictor coefficients
+  # can be interpreted as changing the odds of a better rating
+  data[, col] <- as.ordered(4 - data[, col])
+}
+
+for (col in data_cols)
+{
+  print(sprintf("*****************************"))
+  print(sprintf("Analyzing %s ...", col))
+  print(sprintf("*****************************"))
+  formula <- paste(col, "~ SuggestionCount * LanguageGroup")
+  print(sprintf("Using formula: %s", formula))
+  
+  gee <- ordLORgee(formula, id = data$User, data = data)
+  print(summary(gee))
+  print(exp(coef(gee)))
+}
+
+```
+
+
+```{r}
+
+#linear mixed model
+lmm <- lmer(time ~ length + (1 | method), data = data)
+summary(lmm)
+plot(lmm)
+qqnorm(resid(lmm))
+qqline(resid(lmm))
+
+
+# linear model
+basic.lm <- lm(time ~ (1 | method), data = data)
+summary(basic.lm)
+
+(prelim_plot <- ggplot(data, aes(x = method, y = time)) +
+  geom_point() +
+  geom_smooth(method = "lm"))
+
+plot(basic.lm, which = 1)
+plot(basic.lm, which = 2) 
+boxplot(time ~ method, data = data)
+
+# multiple analyses
+(split_plot <- ggplot(aes(method, time), data = data) + 
+  geom_point() + 
+  facet_wrap(~ method) + # create a facet for each method
+  xlab("method") + 
+  ylab("time"))
+```
+
+```{r}
+boxplot(amount_backs ~ method, data = data_counts)
+boxplot(amount_actions ~ method, data = data_counts)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

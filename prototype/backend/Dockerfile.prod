@@ -1,0 +1,19 @@
+FROM nvcr.io/nvidia/pytorch:21.07-py3
+
+RUN mkdir /app
+
+WORKDIR /app
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+
+COPY ./requirements.prod.txt /app
+
+RUN pip install --upgrade pip
+# use conda to install uwsgi. the image's python interpreter comes with conda (pip install uwsgi fails)
+RUN conda install -c conda-forge uwsgi
+RUN pip install -r /app/requirements.prod.txt
+
+COPY . .
+
+CMD [ "uwsgi", "--ini", "app.ini" ]
+#CMD ["python", "app.py"]

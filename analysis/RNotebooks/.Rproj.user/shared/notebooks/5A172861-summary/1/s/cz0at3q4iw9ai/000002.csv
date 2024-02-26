@@ -1,0 +1,15 @@
+"0","```r
+# Add column for the real needed time (without the time used for generating) (in seconds)
+data <- data %>% mutate(time = needed_time - time_generating)
+
+# Add column for the length of the result (in characters)
+data <- data %>% mutate(length = nchar(result))
+ 
+# Add column for the subject (the userId)
+data <- data %>% mutate(subject = floor(taskid/10))
+
+# Add column for the words per minute
+data <- data %>% mutate(wpm = (length/5)/(time/60))
+
+head(data, 10)
+```"

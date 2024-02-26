@@ -1,0 +1,1 @@
+"0","ddply(data, ~ method, function(d) summary(d$time_minutes))"

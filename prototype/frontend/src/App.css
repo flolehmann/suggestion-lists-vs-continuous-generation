@@ -1,0 +1,51 @@
+.App {
+  text-align: center;
+}
+
+.TextField {
+  border: 3px solid black;
+  padding: 10px;
+  margin: 10px;
+  height: 150px;
+  width: 500px;
+  max-width: 85vw;
+  text-align: left;
+}
+
+.KeywordInput {
+  width: 200px;
+  max-width: 75vw;
+}
+
+.smallSpace {
+  width: auto;
+  height: 10px;
+}
+
+.smallHSpace {
+  height: auto;
+  width: 15px;
+}
+
+.scrollBox {
+  margin: 0 auto;
+  text-align: left;
+  height: 500px;
+  width: 800px;
+  max-width: 80vw;
+  border:1px solid #ccc;
+  overflow:auto;
+}
+
+.cButton {
+  margin: 2px;
+  width: 240px;
+  max-width: 45vw;
+  height: 20px;
+}
+
+.oButton {
+  width: 500px;
+  max-width: 85vw;
+  height: 20px;
+}

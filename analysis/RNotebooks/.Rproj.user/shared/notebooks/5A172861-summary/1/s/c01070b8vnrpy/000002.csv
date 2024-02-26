@@ -1,0 +1,5 @@
+"0","```r
+# Merge the DataFrames actions and backs, which include results from the logging files, with the data
+data <- merge(data, actions, by='taskid')
+data <- merge(data, backs, by='taskid')
+```"
